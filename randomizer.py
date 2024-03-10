@@ -125,6 +125,7 @@ def main():
         total_count=latest - last,
         percentage=f'{100.0 / (latest - last):.3f}'
     )
+    cohost.switchn(POST_TO)  # required for the locking for some reason.
     pid = cohost.createShare(
         POST_TO,
         post_info.post.postId,

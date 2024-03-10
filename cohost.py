@@ -343,6 +343,18 @@ def createShare(post_acct: str, share_of: int, blocks: list[Union[MarkdownBlock,
     return known_pid
 
 
+def switch(proj_id: int):
+    _try_with_backoff('https://cohost.org/api/v1/trpc/projects.switchProject?batch=1', method='POST', json={
+        "0": {
+            "projectId": proj_id
+        }
+    })
+
+
+def switchn(proj_handle: str):
+    switch(HANDLE_TO_PID[proj_handle])
+
+
 def enableShares(pid: int, enabled: bool):
     _try_with_backoff('https://cohost.org/api/v1/trpc/posts.setSharesLocked?batch=1', method='POST',
                       json={'0': {'postId': pid, 'sharesLocked': not enabled}})
@@ -407,6 +419,9 @@ def find_the_original_content(post: ExtendedInfoModel):
     )
 
 
+HANDLE_TO_PID: dict[str, int] = {}
+
+
 def am_login():
     query = r'https://cohost.org/api/v1/trpc/login.loggedIn,projects.listEditedProjects?batch=1&input={}'
     resp = client.get(query)
@@ -416,6 +431,8 @@ def am_login():
     if not login["result"]["data"]["loggedIn"]:
         return False, [], "logged in was False"
     projects = projects["result"]["data"]["projects"]
+    for project in projects:
+        HANDLE_TO_PID[project["handle"]] = project["projectId"]
     project_names = list(map(lambda x: x["handle"], projects))
     return True, project_names, "success!"
 
