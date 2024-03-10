@@ -1,0 +1,6 @@
+rich
+requests
+python>=3.12
+python-dotenv
+jinja2
+beautifulsoup4
