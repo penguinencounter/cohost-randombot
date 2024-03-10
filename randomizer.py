@@ -69,6 +69,10 @@ def main():
                 log.info(f"SKIP {describe}: [red]adult content[/]",
                          extra={"markup": True})
                 continue
+            if post_info.post.postingProject.handle in ban_list:
+                log.info(f"SKIP {describe}: [red]banlist[/]",
+                         extra={"markup": True})
+                continue
             if not post_info.post.canShare:
                 log.info(f"SKIP {describe}: [red]can't share[/]",
                          extra={"markup": True})
