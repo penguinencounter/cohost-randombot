@@ -73,6 +73,10 @@ def main():
                 log.info(f"SKIP {describe}: [red]can't share[/]",
                          extra={"markup": True})
                 continue
+            if '🤖' in post_info.post.postingProject.displayName or post_info.post.postingProject.handle.endswith('-bot'):
+                log.info(f"SKIP {describe}: [red]bot[/]",
+                         extra={"markup": True})
+                continue
 
             if not post_info.post.tags:
                 log.info(f"SKIP {describe}: [red]published to followers only (no tags)[/]",
