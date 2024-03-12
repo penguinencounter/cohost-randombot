@@ -4,9 +4,9 @@ import functools
 import logging
 import re
 import time
-from urllib.parse import urlparse, parse_qs, urlencode, quote
 from datetime import datetime
 from typing import Optional, Any, Literal, Union, Protocol
+from urllib.parse import urlparse, parse_qs, urlencode, quote
 
 import requests
 from bs4 import BeautifulSoup, Tag
@@ -26,9 +26,7 @@ MAX_RETRY = 10
 
 client = requests.Session()
 client.cookies.set("connect.sid", COHOST_COOKIE)
-client.headers.update({
-    "User-Agent": "cohost-randombot operated by @quae-nihl"
-})
+client.headers.update({"User-Agent": "cohost-randombot operated by @quae-nihl"})
 
 
 class AttachmentBlock(BaseModel):
@@ -52,12 +50,7 @@ class MarkdownBlock(BaseModel):
 
     @classmethod
     def of(cls, text: str):
-        return cls(
-            type="markdown",
-            markdown=cls.Content(
-                content=text
-            )
-        )
+        return cls(type="markdown", markdown=cls.Content(content=text))
 
 
 class AskBlock(BaseModel):
@@ -160,8 +153,8 @@ def _try_with_backoff(url: str, method: str = "GET", json: Any | None = None):
             if failures > MAX_RETRY:
                 raise TimeoutError(f"too many retries: {failures}")
             # is there a retry-after
-            if 'retry-after' in resp.headers:
-                new_schedule = parse_retry_after(resp.headers['retry-after'], failures)
+            if "retry-after" in resp.headers:
+                new_schedule = parse_retry_after(resp.headers["retry-after"], failures)
                 duration = new_schedule - datetime.now()
             else:
                 # guess??
@@ -186,10 +179,17 @@ def _try_with_backoff(url: str, method: str = "GET", json: Any | None = None):
 
 
 def get_author_classic(pid: int):
-    basic_info = _try_with_backoff(f'https://cohost.org/api/v1/project_post/{pid}').json()
-    author = list(filter(lambda x: x['href'].startswith('/api/v1/project/') and not x['href'].endswith('/posts'),
-                         basic_info['_links']))
-    author_name = author[0]['href'].split('/')[-1]
+    basic_info = _try_with_backoff(
+        f"https://cohost.org/api/v1/project_post/{pid}"
+    ).json()
+    author = list(
+        filter(
+            lambda x: x["href"].startswith("/api/v1/project/")
+            and not x["href"].endswith("/posts"),
+            basic_info["_links"],
+        )
+    )
+    author_name = author[0]["href"].split("/")[-1]
     return author_name
 
 
@@ -209,13 +209,16 @@ class CreatePostModel(BaseModel):
     content: Union[CreatePostModel.ShareContent, CreatePostModel.Content]
 
 
-POST_INFO_TEMPLATE = (r'https://cohost.org/api/v1/trpc/posts.singlePost'
-                      r'?batch=1&input={%220%22:{%22postId%22:[[postid]],%22handle%22:%22[[handle]]%22}}')
+POST_INFO_TEMPLATE = (
+    r"https://cohost.org/api/v1/trpc/posts.singlePost"
+    r"?batch=1&input={%220%22:{%22postId%22:[[postid]],%22handle%22:%22[[handle]]%22}}"
+)
 
 
 class _TagAnalyzeProtocol(Protocol):
-    def __call__(self, tag_name: str, target: int, max_pages: int = 3) -> tuple[bool, str]:
-        ...
+    def __call__(
+        self, tag_name: str, target: int, max_pages: int = 3
+    ) -> tuple[bool, str]: ...
 
 
 @functools.cache  # we really shouldn't be spamming this.
@@ -234,7 +237,7 @@ def _tag_analyze(tag_name: str, target: int, max_pages: int = 10) -> tuple[bool,
     uniques = set()
     offset = 0
     while page_count < max_pages:  # and len(uniques) < target
-        url = f'https://cohost.org/rc/tagged/{quote(tag_name)}?'
+        url = f"https://cohost.org/rc/tagged/{quote(tag_name)}?"
         query = {}
         if offset > 0:
             query["skipPosts"] = offset
@@ -246,7 +249,9 @@ def _tag_analyze(tag_name: str, target: int, max_pages: int = 10) -> tuple[bool,
         result = _try_with_backoff(url)
         soup = BeautifulSoup(result.content, "html.parser")
         # Grab the refTimestamp to avoid murdering Cohost's cache servers
-        links_to_tags = soup.find_all(name="a", href=re.compile("^https://cohost.org/rc/tagged"))
+        links_to_tags = soup.find_all(
+            name="a", href=re.compile("^https://cohost.org/rc/tagged")
+        )
         the_tag: Optional[Tag] = None
         for a in links_to_tags:
             if a.find(name="svg", recursive=False) is not None:
@@ -257,13 +262,17 @@ def _tag_analyze(tag_name: str, target: int, max_pages: int = 10) -> tuple[bool,
             reft = parse_qs(parsed_url.query).get("refTimestamp", None)
         page_count += 1
 
-        post_handle_elements = soup.select('header.co-thread-header a.co-project-handle')
-        post_handles = list(map(lambda x: x.attrs["href"].split('/')[-1], post_handle_elements))
+        post_handle_elements = soup.select(
+            "header.co-thread-header a.co-project-handle"
+        )
+        post_handles = list(
+            map(lambda x: x.attrs["href"].split("/")[-1], post_handle_elements)
+        )
         uniques.update(post_handles)
         if len(post_handles) == 0:
             return len(uniques) >= target, str(len(uniques))
         offset += len(post_handles)
-    return len(uniques) >= target, f'{len(uniques)} or more'
+    return len(uniques) >= target, f"{len(uniques)} or more"
 
 
 tag_analyze: _TagAnalyzeProtocol = _tag_analyze
@@ -281,24 +290,32 @@ def get_author_hacky(pid: int):
             tags=[],
             headline="",
             postState=1,
-            shareOfPostId=pid
-        )
+            shareOfPostId=pid,
+        ),
     )
-    dumped = model.model_dump(mode='json')
-    resp = _try_with_backoff('https://cohost.org/api/v1/trpc/posts.create?batch=1', method='POST', json={"0": dumped})
+    dumped = model.model_dump(mode="json")
+    resp = _try_with_backoff(
+        "https://cohost.org/api/v1/trpc/posts.create?batch=1",
+        method="POST",
+        json={"0": dumped},
+    )
     create_info = resp.json()
-    known_pid = create_info[0]['result']['data']['postId']
+    known_pid = create_info[0]["result"]["data"]["postId"]
     try:
         # We now know the author.
         timeout = 3
-        get_info_url = POST_INFO_TEMPLATE.replace("[[postid]]", str(known_pid)).replace("[[handle]]", SCRATCHPAD_HANDLE)
+        get_info_url = POST_INFO_TEMPLATE.replace("[[postid]]", str(known_pid)).replace(
+            "[[handle]]", SCRATCHPAD_HANDLE
+        )
         while 1:
             try:
                 dummy_about = _try_with_backoff(get_info_url).json()
             except ValueError:
                 timeout -= 1
                 if timeout == 0:
-                    raise ValueError("never got post info for dummy share (maybe it failed)")
+                    raise ValueError(
+                        "never got post info for dummy share (maybe it failed)"
+                    )
                 log.info("waiting...")
                 time.sleep(0.5)
             else:
@@ -314,16 +331,23 @@ def get_author_hacky(pid: int):
     finally:
         # delete the post
         try:
-            _try_with_backoff('https://cohost.org/api/v1/trpc/posts.delete?batch=1', method='POST',
-                              json={"0": {"postId": known_pid, "projectHandle": SCRATCHPAD_HANDLE}})
+            _try_with_backoff(
+                "https://cohost.org/api/v1/trpc/posts.delete?batch=1",
+                method="POST",
+                json={"0": {"postId": known_pid, "projectHandle": SCRATCHPAD_HANDLE}},
+            )
         except ValueError as e:
             log.error(f"failed to clean up: {e}")
         else:
             log.info("cleanup success")
 
 
-def createShare(post_acct: str, share_of: int, blocks: list[Union[MarkdownBlock, AskBlock, AttachmentBlock]],
-                tags: list[str]):
+def create_share(
+    post_acct: str,
+    share_of: int,
+    blocks: list[Union[MarkdownBlock, AskBlock, AttachmentBlock]],
+    tags: list[str],
+):
     model = CreatePostModel(
         projectHandle=post_acct,
         content=CreatePostModel.ShareContent(
@@ -333,36 +357,46 @@ def createShare(post_acct: str, share_of: int, blocks: list[Union[MarkdownBlock,
             tags=tags,
             headline="",
             postState=1,
-            shareOfPostId=share_of
-        )
+            shareOfPostId=share_of,
+        ),
     )
-    dumped = model.model_dump(mode='json')
-    resp = _try_with_backoff('https://cohost.org/api/v1/trpc/posts.create?batch=1', method='POST', json={"0": dumped})
+    dumped = model.model_dump(mode="json")
+    resp = _try_with_backoff(
+        "https://cohost.org/api/v1/trpc/posts.create?batch=1",
+        method="POST",
+        json={"0": dumped},
+    )
     create_info = resp.json()
-    known_pid = create_info[0]['result']['data']['postId']
+    known_pid = create_info[0]["result"]["data"]["postId"]
     return known_pid
 
 
 def switch(proj_id: int):
-    _try_with_backoff('https://cohost.org/api/v1/trpc/projects.switchProject?batch=1', method='POST', json={
-        "0": {
-            "projectId": proj_id
-        }
-    })
+    _try_with_backoff(
+        "https://cohost.org/api/v1/trpc/projects.switchProject?batch=1",
+        method="POST",
+        json={"0": {"projectId": proj_id}},
+    )
 
 
 def switchn(proj_handle: str):
     switch(HANDLE_TO_PID[proj_handle])
 
 
-def enableShares(pid: int, enabled: bool):
-    _try_with_backoff('https://cohost.org/api/v1/trpc/posts.setSharesLocked?batch=1', method='POST',
-                      json={'0': {'postId': pid, 'sharesLocked': not enabled}})
+def enable_shares(pid: int, enabled: bool):
+    _try_with_backoff(
+        "https://cohost.org/api/v1/trpc/posts.setSharesLocked?batch=1",
+        method="POST",
+        json={"0": {"postId": pid, "sharesLocked": not enabled}},
+    )
 
 
-def enableComments(pid: int, enabled: bool):
-    _try_with_backoff('https://cohost.org/api/v1/trpc/posts.setCommentsLocked?batch=1', method='POST',
-                      json={'0': {'postId': pid, 'commentsLocked': not enabled}})
+def enable_comments(pid: int, enabled: bool):
+    _try_with_backoff(
+        "https://cohost.org/api/v1/trpc/posts.setCommentsLocked?batch=1",
+        method="POST",
+        json={"0": {"postId": pid, "commentsLocked": not enabled}},
+    )
 
 
 def next_id() -> int:
@@ -374,16 +408,23 @@ def next_id() -> int:
             cws=[],
             tags=[],
             headline="",
-            postState=1
-        )
+            postState=1,
+        ),
     )
-    dumped = model.model_dump(mode='json')
-    resp = _try_with_backoff('https://cohost.org/api/v1/trpc/posts.create?batch=1', method='POST', json={"0": dumped})
+    dumped = model.model_dump(mode="json")
+    resp = _try_with_backoff(
+        "https://cohost.org/api/v1/trpc/posts.create?batch=1",
+        method="POST",
+        json={"0": dumped},
+    )
     create_info = resp.json()
-    known_pid = create_info[0]['result']['data']['postId']
+    known_pid = create_info[0]["result"]["data"]["postId"]
     # drop immediately
-    _try_with_backoff('https://cohost.org/api/v1/trpc/posts.delete?batch=1', method='POST',
-                      json={"0": {"postId": known_pid, "projectHandle": SCRATCHPAD_HANDLE}})
+    _try_with_backoff(
+        "https://cohost.org/api/v1/trpc/posts.delete?batch=1",
+        method="POST",
+        json={"0": {"postId": known_pid, "projectHandle": SCRATCHPAD_HANDLE}},
+    )
     return known_pid
 
 
@@ -393,8 +434,10 @@ def try_post(pid: int):
         author_name = get_author_classic(pid)
     except ValueError:
         author_name = get_author_hacky(pid)
-    log.debug(f'id {pid} by {author_name}')
-    custom = POST_INFO_TEMPLATE.replace("[[postid]]", str(pid)).replace("[[handle]]", author_name)
+    log.debug(f"id {pid} by {author_name}")
+    custom = POST_INFO_TEMPLATE.replace("[[postid]]", str(pid)).replace(
+        "[[handle]]", author_name
+    )
     extinfo = _try_with_backoff(custom).json()
     # shove it into the box
     return ExtendedInfoModel(**extinfo[0]["result"]["data"])
@@ -412,18 +455,15 @@ def find_the_original_content(post: ExtendedInfoModel):
     while post_model.transparentShareOfPostId is not None:
         index -= 1
         post_model = tree[index]
-    modified = post_model.model_copy(update={"shareTree": tree[:index + 1]}, deep=True)
-    return ExtendedInfoModel(
-        post=modified,
-        comments=comments
-    )
+    modified = post_model.model_copy(update={"shareTree": tree[: index + 1]}, deep=True)
+    return ExtendedInfoModel(post=modified, comments=comments)
 
 
 HANDLE_TO_PID: dict[str, int] = {}
 
 
 def am_login():
-    query = r'https://cohost.org/api/v1/trpc/login.loggedIn,projects.listEditedProjects?batch=1&input={}'
+    query = r"https://cohost.org/api/v1/trpc/login.loggedIn,projects.listEditedProjects?batch=1&input={}"
     resp = client.get(query)
     if 400 <= resp.status_code <= 599:
         return False, [], f"bad HTTP code: {resp.status_code}"
@@ -451,9 +491,14 @@ def chain():
     box = try_post(4985784)
     oc = find_the_original_content(box)
 
-    rp(f"last contributor: {oc.post.postId} by '{oc.post.postingProject.displayName}' ('{oc.post.postingProject.handle}')")
-    rp(f"oldest posts first for {box.post.postId}, a {typeof(box.post)} by "
-       f"'{box.post.postingProject.displayName}' ('{box.post.postingProject.handle}'):")
+    rp(
+        f"last contributor: {oc.post.postId} by '{oc.post.postingProject.displayName}' "
+        f"('{oc.post.postingProject.handle}')"
+    )
+    rp(
+        f"oldest posts first for {box.post.postId}, a {typeof(box.post)} by "
+        f"'{box.post.postingProject.displayName}' ('{box.post.postingProject.handle}'):"
+    )
 
     properties = []
     if box.post.canShare:
@@ -465,7 +510,6 @@ def chain():
     if box.post.commentsLocked:
         properties.append("[bright_red]comments locked[/]")
     rp(f"[bright_yellow]status: [bold]{', '.join(properties)}[/][/]")
-    no_add_combo_counter = 0
     seen = set()
     collection = []
     for i, item in enumerate([*box.post.shareTree, box.post]):
@@ -474,9 +518,9 @@ def chain():
         rp(f"  visible: {item.postId}")
     the_post = box.post
     while the_post.shareTree and typeof(the_post.shareTree[-1]) == "share":
-        chain = try_post(the_post.shareTree[-1].postId)
-        if chain.post.shareTree and chain.post.shareTree[-1]:
-            the_post = chain.post
+        shared_post_info = try_post(the_post.shareTree[-1].postId)
+        if shared_post_info.post.shareTree and shared_post_info.post.shareTree[-1]:
+            the_post = shared_post_info.post
             if the_post.postId not in seen:
                 rp(f"  hidden : {the_post.postId}")
                 seen.add(the_post.postId)
@@ -485,18 +529,20 @@ def chain():
     rp("full tree:")
     for item in sorted(collection, key=lambda x: x.postId):
         type_ = typeof(item).rjust(8)
-        rp(f"  {type_}: {item.postId} \"{item.headline or '<no headline>'}\" "
-           f"by '{item.postingProject.displayName}' ('{item.postingProject.handle}'): "
-           f"https://cohost.org/{item.postingProject.handle}/post/{item.postId}-a")
+        rp(
+            f"  {type_}: {item.postId} \"{item.headline or '<no headline>'}\" "
+            f"by '{item.postingProject.displayName}' ('{item.postingProject.handle}'): "
+            f"https://cohost.org/{item.postingProject.handle}/post/{item.postId}-a"
+        )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG, handlers=[RichHandler()])
-    is_logged_in, projects, reason = am_login()
+    is_logged_in, owned_projects, reason = am_login()
     if not is_logged_in:
         rp(f"[bold bright_red]Not logged in:[/] [bright_red]{reason}[/]")
     else:
-        names = '[/], [bright_green]'.join(map(lambda x: f"@{x}", projects))
+        names = "[/], [bright_green]".join(map(lambda x: f"@{x}", owned_projects))
         rp(f"[bold bright_green]Logged in:[/] [bright_green]{names}[/]")
 
     # chain()
