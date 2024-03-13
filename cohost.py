@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import functools
+import json
 import logging
 import re
 import time
 from datetime import datetime
 from typing import Optional, Any, Literal, Union, Protocol
-from urllib.parse import urlparse, parse_qs, urlencode, quote
+from urllib.parse import urlparse, parse_qs, urlencode, quote, quote_plus
 
 import requests
 from bs4 import BeautifulSoup, Tag
@@ -167,8 +168,8 @@ def _try_with_backoff(url: str, method: str = "GET", json: Any | None = None):
                 js = resp.json()
                 if "message" in js:
                     rp(js["message"].strip())
-                if "message" in js[0]["error"]:
-                    rp(js[0]["error"]["message"].strip())
+                if "message" in js["error"]:
+                    rp(js["error"]["message"].strip())
             except ValueError:
                 pass
             except KeyError:
@@ -176,6 +177,22 @@ def _try_with_backoff(url: str, method: str = "GET", json: Any | None = None):
             raise ValueError(f"got {resp.status_code} for {url}")
         break
     return resp
+
+
+def _trpc(protocol: str, input_json: dict):
+    # generate minified JSON
+    json_out = json.dumps(input_json, separators=(",", ":"))
+    # encode for URL
+    encoded = quote_plus(json_out)
+    return _try_with_backoff(
+        f"https://cohost.org/api/v1/trpc/{protocol}?input={encoded}"
+    )
+
+
+def _trpc_post(protocol: str, input_json: dict):
+    return _try_with_backoff(
+        f"https://cohost.org/api/v1/trpc/{protocol}", method="POST", json=input_json
+    )
 
 
 def get_author_classic(pid: int):
@@ -209,16 +226,11 @@ class CreatePostModel(BaseModel):
     content: Union[CreatePostModel.ShareContent, CreatePostModel.Content]
 
 
-POST_INFO_TEMPLATE = (
-    r"https://cohost.org/api/v1/trpc/posts.singlePost"
-    r"?batch=1&input={%220%22:{%22postId%22:[[postid]],%22handle%22:%22[[handle]]%22}}"
-)
-
-
 class _TagAnalyzeProtocol(Protocol):
     def __call__(
         self, tag_name: str, target: int, max_pages: int = 3
-    ) -> tuple[bool, str]: ...
+    ) -> tuple[bool, str]:
+        ...
 
 
 @functools.cache  # we really shouldn't be spamming this.
@@ -294,22 +306,21 @@ def get_author_hacky(pid: int):
         ),
     )
     dumped = model.model_dump(mode="json")
-    resp = _try_with_backoff(
-        "https://cohost.org/api/v1/trpc/posts.create?batch=1",
-        method="POST",
-        json={"0": dumped},
+    resp = _trpc_post(
+        "posts.create",
+        dumped,
     )
     create_info = resp.json()
-    known_pid = create_info[0]["result"]["data"]["postId"]
+    known_pid = create_info["result"]["data"]["postId"]
     try:
         # We now know the author.
         timeout = 3
-        get_info_url = POST_INFO_TEMPLATE.replace("[[postid]]", str(known_pid)).replace(
-            "[[handle]]", SCRATCHPAD_HANDLE
-        )
         while 1:
             try:
-                dummy_about = _try_with_backoff(get_info_url).json()
+                dummy_about = _trpc(
+                    "posts.singlePost",
+                    {"postId": known_pid, "handle": SCRATCHPAD_HANDLE},
+                ).json()
             except ValueError:
                 timeout -= 1
                 if timeout == 0:
@@ -320,7 +331,7 @@ def get_author_hacky(pid: int):
                 time.sleep(0.5)
             else:
                 break
-        dummy_model = ExtendedInfoModel(**dummy_about[0]["result"]["data"])
+        dummy_model = ExtendedInfoModel(**dummy_about["result"]["data"])
 
         # Grab the original author.
         base_post_info = dummy_model.post.shareTree[-1]
@@ -331,10 +342,9 @@ def get_author_hacky(pid: int):
     finally:
         # delete the post
         try:
-            _try_with_backoff(
-                "https://cohost.org/api/v1/trpc/posts.delete?batch=1",
-                method="POST",
-                json={"0": {"postId": known_pid, "projectHandle": SCRATCHPAD_HANDLE}},
+            _trpc_post(
+                "posts.delete",
+                {"postId": known_pid, "projectHandle": SCRATCHPAD_HANDLE},
             )
         except ValueError as e:
             log.error(f"failed to clean up: {e}")
@@ -361,22 +371,14 @@ def create_share(
         ),
     )
     dumped = model.model_dump(mode="json")
-    resp = _try_with_backoff(
-        "https://cohost.org/api/v1/trpc/posts.create?batch=1",
-        method="POST",
-        json={"0": dumped},
-    )
+    resp = _trpc_post("posts.create", dumped)
     create_info = resp.json()
-    known_pid = create_info[0]["result"]["data"]["postId"]
+    known_pid = create_info["result"]["data"]["postId"]
     return known_pid
 
 
 def switch(proj_id: int):
-    _try_with_backoff(
-        "https://cohost.org/api/v1/trpc/projects.switchProject?batch=1",
-        method="POST",
-        json={"0": {"projectId": proj_id}},
-    )
+    _trpc_post("projects.switchProject", {"projectId": proj_id})
 
 
 def switchn(proj_handle: str):
@@ -384,18 +386,16 @@ def switchn(proj_handle: str):
 
 
 def enable_shares(pid: int, enabled: bool):
-    _try_with_backoff(
-        "https://cohost.org/api/v1/trpc/posts.setSharesLocked?batch=1",
-        method="POST",
-        json={"0": {"postId": pid, "sharesLocked": not enabled}},
+    _trpc_post(
+        "posts.setSharesLocked",
+        {"postId": pid, "sharesLocked": not enabled},
     )
 
 
 def enable_comments(pid: int, enabled: bool):
-    _try_with_backoff(
-        "https://cohost.org/api/v1/trpc/posts.setCommentsLocked?batch=1",
-        method="POST",
-        json={"0": {"postId": pid, "commentsLocked": not enabled}},
+    _trpc_post(
+        "posts.setCommentsLocked",
+        {"postId": pid, "commentsLocked": not enabled},
     )
 
 
@@ -412,18 +412,16 @@ def next_id() -> int:
         ),
     )
     dumped = model.model_dump(mode="json")
-    resp = _try_with_backoff(
-        "https://cohost.org/api/v1/trpc/posts.create?batch=1",
-        method="POST",
-        json={"0": dumped},
+    resp = _trpc_post(
+        "posts.create",
+        dumped,
     )
     create_info = resp.json()
-    known_pid = create_info[0]["result"]["data"]["postId"]
+    known_pid = create_info["result"]["data"]["postId"]
     # drop immediately
-    _try_with_backoff(
-        "https://cohost.org/api/v1/trpc/posts.delete?batch=1",
-        method="POST",
-        json={"0": {"postId": known_pid, "projectHandle": SCRATCHPAD_HANDLE}},
+    _trpc_post(
+        "posts.delete",
+        {"postId": known_pid, "projectHandle": SCRATCHPAD_HANDLE},
     )
     return known_pid
 
@@ -435,12 +433,9 @@ def try_post(pid: int):
     except ValueError:
         author_name = get_author_hacky(pid)
     log.debug(f"id {pid} by {author_name}")
-    custom = POST_INFO_TEMPLATE.replace("[[postid]]", str(pid)).replace(
-        "[[handle]]", author_name
-    )
-    extinfo = _try_with_backoff(custom).json()
+    extinfo = _trpc("posts.singlePost", {"postId": pid, "handle": author_name}).json()
     # shove it into the box
-    return ExtendedInfoModel(**extinfo[0]["result"]["data"])
+    return ExtendedInfoModel(**extinfo["result"]["data"])
 
 
 def find_the_original_content(post: ExtendedInfoModel):
