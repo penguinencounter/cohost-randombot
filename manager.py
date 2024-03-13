@@ -1,8 +1,11 @@
 import logging
+import os.path
 import re
+import time
 
-from cohost import list_asks, post_info, delete, AskModel
+from cohost import list_asks, post_info, delete, AskModel, ask_reject, am_login
 from settings import POST_TO
+from rich import print as rp
 
 BOT_OP = [
     188410,  # @quae-nihl
@@ -50,4 +53,26 @@ def parse(content: str, context: AskModel):
                 op_delete(int(target), context)
             case _:
                 log.info("not yet implemented")
+    ask_reject(context.askId)
 
+
+def main():
+    max_duration = 120 # seconds
+    while os.path.exists(".lock"):
+        time.sleep(1)
+        max_duration -= 1
+        if max_duration <= 0:
+            rp("[bold bright_red]lock stuck? giving up[/]")
+            exit(1)
+    yesno, which, why = am_login()
+    if not yesno:
+        rp("[bold bright_red]not logged in!![/]")
+        exit(1)
+    with open('.lock', 'w') as f:
+        pass
+    try:
+        asks = list_asks(POST_TO)
+        for ask in asks:
+            parse(ask.content, ask)
+    finally:
+        os.remove(".lock")
