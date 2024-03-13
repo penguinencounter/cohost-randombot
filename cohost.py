@@ -221,7 +221,9 @@ def delete(post_id: int, author: str):
 
 
 def post_info(post_id: int, author: str) -> ExtendedInfoModel:
-    ...
+    extinfo = _trpc("posts.singlePost", {"postId": post_id, "handle": author}).json()
+    # shove it into the box
+    return ExtendedInfoModel(**extinfo["result"]["data"])
 
 
 def get_author_classic(pid: int):
@@ -463,7 +465,7 @@ def list_asks(handle: str) -> list[AskModel]:
 
 
 def ask_reject(ask_id: str):
-    _trpc_post("asks.reject", ask_id)
+    _try_with_backoff("https://cohost.org/api/v1/trpc/asks.reject?batch=1", method="POST", json={"0": ask_id})
 
 
 def next_id() -> int:
@@ -596,7 +598,7 @@ def chain():
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, handlers=[RichHandler()])
+    logging.basicConfig(level=logging.INFO, handlers=[RichHandler()])
     is_logged_in, owned_projects, reason = am_login()
     if not is_logged_in:
         rp(f"[bold bright_red]Not logged in:[/] [bright_red]{reason}[/]")
