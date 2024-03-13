@@ -144,6 +144,24 @@ class ExtendedInfoModel(BaseModel):
     comments: dict[str, list[CommentModel]]
 
 
+class AskModel(BaseModel):
+    class MinimalProjectModel(BaseModel):
+        projectId: int
+        handle: str
+        avatarURL: Optional[str] = Field(default=None)
+        avatarPreviewURL: Optional[str] = Field(default=None)
+        privacy: str
+        flags: list
+        avatarShape: str
+        displayName: str
+
+    anon: bool
+    askingProject: MinimalProjectModel
+    askId: str
+    content: str
+    sentAt: str
+
+
 def _try_with_backoff(url: str, method: str = "GET", json: Any | None = None):
     failures = 0
     while 1:
@@ -179,7 +197,7 @@ def _try_with_backoff(url: str, method: str = "GET", json: Any | None = None):
     return resp
 
 
-def _trpc(protocol: str, input_json: dict):
+def _trpc(protocol: str, input_json: Any):
     # generate minified JSON
     json_out = json.dumps(input_json, separators=(",", ":"))
     # encode for URL
@@ -189,10 +207,21 @@ def _trpc(protocol: str, input_json: dict):
     )
 
 
-def _trpc_post(protocol: str, input_json: dict):
+def _trpc_post(protocol: str, input_json: Any):
     return _try_with_backoff(
         f"https://cohost.org/api/v1/trpc/{protocol}", method="POST", json=input_json
     )
+
+
+def delete(post_id: int, author: str):
+    _trpc_post(
+        "posts.delete",
+        {"postId": post_id, "projectHandle": author},
+    )
+
+
+def post_info(post_id: int, author: str) -> ExtendedInfoModel:
+    ...
 
 
 def get_author_classic(pid: int):
@@ -342,10 +371,7 @@ def get_author_hacky(pid: int):
     finally:
         # delete the post
         try:
-            _trpc_post(
-                "posts.delete",
-                {"postId": known_pid, "projectHandle": SCRATCHPAD_HANDLE},
-            )
+            delete(known_pid, SCRATCHPAD_HANDLE)
         except ValueError as e:
             log.error(f"failed to clean up: {e}")
         else:
@@ -399,6 +425,23 @@ def enable_comments(pid: int, enabled: bool):
     )
 
 
+def list_asks(handle: str) -> list[AskModel]:
+    """
+    List asks. Switches accounts.
+    :param handle: handle to switch to
+    :return:
+    """
+    switchn(handle)
+    response = _trpc("asks.listPending", {})
+    ask_data = response.json()["result"]["data"]["asks"]
+    ask_pack = list(map(lambda json_: AskModel(**json_), ask_data))
+    return ask_pack
+
+
+def ask_reject(ask_id: str):
+    _trpc_post("asks.reject", ask_id)
+
+
 def next_id() -> int:
     model = CreatePostModel(
         projectHandle=SCRATCHPAD_HANDLE,
@@ -419,10 +462,7 @@ def next_id() -> int:
     create_info = resp.json()
     known_pid = create_info["result"]["data"]["postId"]
     # drop immediately
-    _trpc_post(
-        "posts.delete",
-        {"postId": known_pid, "projectHandle": SCRATCHPAD_HANDLE},
-    )
+    delete(known_pid, SCRATCHPAD_HANDLE)
     return known_pid
 
 
@@ -542,4 +582,5 @@ if __name__ == "__main__":
 
     # chain()
     # get_author_hacky(4957361)
-    tag_analyze("The Cohost Global Feed", 3)
+    # tag_analyze("The Cohost Global Feed", 3)
+    rp(list_asks("void-starlight"))

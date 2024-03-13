@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>request deletion</title>
+  <style>
+      body {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background-color: #303030;
+          font-family: sans-serif;
+          color: #ffffff;
+          min-height: 100vh;
+      }
+
+      main {
+          width: max-content;
+          padding: 10px;
+          border-radius: 10px;
+          background-color: #202020;
+      }
+
+      #goto {
+          font-size: 1.1rem;
+      }
+
+      #codeblock {
+          padding: 10px;
+          border-radius: 10px;
+          background-color: #303030;
+          font-family: monospace;
+          margin: 10px 0;
+      }
+
+      a {
+          color: #b0ffff;
+      }
+
+      a:visited {
+          color: #d0b0ff;
+      }
+
+      .permit-name {
+          font-weight: bold;
+      }
+  </style>
+  <script>
+      window.addEventListener("DOMContentLoaded", () => {
+          const query = new URLSearchParams(document.location.search)
+          const permitted = query.getAll("permitted")
+          const permissionEl = document.createElement("span")
+          for (let i = 0; i < permitted.length; i++) {
+              const nameEl = document.createElement("span")
+              nameEl.textContent = permitted[i]
+              nameEl.classList.add("permit-name")
+              if (i > 0) {
+                  const joiner = document.createElement("span")
+                  joiner.textContent = " or ";
+                  permissionEl.appendChild(joiner)
+              }
+              permissionEl.appendChild(nameEl)
+          }
+          document.getElementById("permitted").replaceWith(permissionEl)
+
+          const target = query.get("target")
+          document.getElementById("codeblock").textContent = "```@randomizer\ndelete " + target + "\n```"
+      })
+  </script>
+</head>
+<body>
+<main>
+  <h2>to request deletion</h2>
+  <div><i>note:</i> only <span id="permitted">(enable JS!)</span> can do this</div>
+  <div>send an ask to @randomizer with this text:</div>
+  <div>(the ask will be discarded,
+    if you want to leave a message send a seperate ask)
+  </div>
+  <pre id="codeblock">(enable JS!!)</pre>
+  <div><a id="goto" href="https://cohost.org/randomizer/ask">go to the ask page</a></div>
+</main>
+</body>
+</html>
