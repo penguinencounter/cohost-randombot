@@ -136,6 +136,7 @@ def main():
         timestamp=datetime.now(tz=timezone.utc).strftime("%a %m %B, %Y %H:%M:%S %Z"),
         total_count=latest - last,
         percentage=f"{100.0 / (latest - last):.3f}",
+        delete_url="[[delete_url]]"
     )
     cohost.switchn(POST_TO)  # required for the locking for some reason.
     pid = cohost.create_share(
@@ -147,6 +148,33 @@ def main():
     time.sleep(0.5)
     cohost.enable_shares(pid, False)
     cohost.enable_comments(pid, False)
+    permitted = [post_info.post.postingProject.handle]
+    if post_info.post.shareTree:
+        permitted.append(post_info.post.shareTree[0].postingProject.handle)
+    perm_string = ''.join(map(lambda x: f'&permitted={x}', permitted))
+    new_content = the_template.render(
+        original_href=post_info.post.singlePostPageUrl,
+        typeof=cohost.typeof(post_info.post),
+        no_eff_tags=len(eft),
+        eff_tags_label=f"effective tags" if post_info.post.shareTree else "tags",
+        which_tag=f"#{verify_with}",
+        tag_use_count=verify_count,
+        pid=post_info.post.postId,
+        handle=post_info.post.postingProject.handle,
+        uid=post_info.post.postingProject.projectId,
+        timestamp=datetime.now(tz=timezone.utc).strftime("%a %m %B, %Y %H:%M:%S %Z"),
+        total_count=latest - last,
+        percentage=f"{100.0 / (latest - last):.3f}",
+        delete_url=f"https://penguinencounter.github.io/cohost-randombot/del.html?target={pid}{perm_string}"
+    )
+    cohost.edit_share(
+        pid,
+        POST_TO,
+        post_info.post.postId,
+        [cohost.MarkdownBlock.of(new_content)],
+        ["bot", "randomizer/random-post"],
+    )
+
     log.info(f"SUCCESS: {pid}")
 
 

@@ -231,7 +231,7 @@ def get_author_classic(pid: int):
     author = list(
         filter(
             lambda x: x["href"].startswith("/api/v1/project/")
-            and not x["href"].endswith("/posts"),
+                      and not x["href"].endswith("/posts"),
             basic_info["_links"],
         )
     )
@@ -253,6 +253,10 @@ class CreatePostModel(BaseModel):
 
     projectHandle: str
     content: Union[CreatePostModel.ShareContent, CreatePostModel.Content]
+
+
+class EditPostModel(CreatePostModel):
+    postId: int
 
 
 class _TagAnalyzeProtocol(Protocol):
@@ -401,6 +405,26 @@ def create_share(
     create_info = resp.json()
     known_pid = create_info["result"]["data"]["postId"]
     return known_pid
+
+
+def edit_share(pid: int, handle: str, share_of: int,
+               blocks: list[Union[MarkdownBlock, AskBlock, AttachmentBlock]],
+               tags: list[str]):
+    model = EditPostModel(
+        projectHandle=handle,
+        postId=pid,
+        content=CreatePostModel.ShareContent(
+            adultContent=False,
+            blocks=blocks,
+            cws=[],
+            tags=tags,
+            headline="",
+            postState=1,
+            shareOfPostId=share_of,
+        )
+    )
+    dumped = model.model_dump(mode="json")
+    resp = _trpc_post("posts.update", dumped)
 
 
 def switch(proj_id: int):
