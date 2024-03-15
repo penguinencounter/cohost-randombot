@@ -10,7 +10,7 @@ from rich import print as rp
 from rich.logging import RichHandler
 
 import cohost
-from settings import POST_TO
+from settings import POST_TO, banned_tags, banned_cws
 
 log = logging.getLogger("randomizer")
 j2env = Environment(loader=FileSystemLoader(""), autoescape=select_autoescape())
@@ -23,8 +23,14 @@ def effective_tags(topmost: cohost.PostModel, share: cohost.PostModel):
     return set(topmost.tags) & set(share.tags)
 
 
+def check_ban(model: cohost.PostModel) -> bool:
+    return bool(set(map(lambda x: x.lower(), model.tags)) & banned_tags) or bool(
+        set(map(lambda x: x.lower(), model.cws)) & banned_cws
+    )
+
+
 def main():
-    max_duration = 120 # seconds
+    max_duration = 120  # seconds
     while os.path.exists(".lock"):
         time.sleep(1)
         max_duration -= 1
@@ -37,7 +43,7 @@ def main():
         rp("[bold bright_red]not logged in!![/]")
         exit(1)
 
-    with open('.lock', 'w') as f:
+    with open(".lock", "w") as f:
         pass
     try:
         latest = cohost.next_id()
@@ -58,7 +64,9 @@ def main():
         verify_count = -1
         while 1:
             if max_att <= 0:
-                log.critical("ran out of attempts or there is no more content to look at")
+                log.critical(
+                    "ran out of attempts or there is no more content to look at"
+                )
                 exit(1)
             choiced = random.randint(last, latest)
             if choiced in ban_list:
@@ -77,12 +85,27 @@ def main():
                     continue
                 if post_info.post.effectiveAdultContent:
                     log.info(
-                        f"SKIP {describe}: [red]adult content[/]", extra={"markup": True}
+                        f"SKIP {describe}: [red]adult content[/]",
+                        extra={"markup": True},
                     )
                     continue
                 if post_info.post.postingProject.handle in ban_list:
-                    log.info(f"SKIP {describe}: [red]banlist[/]", extra={"markup": True})
+                    log.info(
+                        f"SKIP {describe}: [red]banlist[/]", extra={"markup": True}
+                    )
                     continue
+                if check_ban(post_info.post):
+                    log.info(
+                        f"SKIP {describe}: [red]tag ban[/]", extra={"markup": True}
+                    )
+                    continue
+                if post_info.post.shareTree:
+                    if check_ban(post_info.post.shareTree[0]):
+                        log.info(
+                            f"SKIP {describe}: [red]tag ban[/]", extra={"markup": True}
+                        )
+                        continue
+
                 if not post_info.post.canShare:
                     log.info(
                         f"SKIP {describe}: [red]can't share[/]", extra={"markup": True}
@@ -102,7 +125,9 @@ def main():
                     )
                     continue
                 if post_info.post.shareTree:
-                    eft = list(effective_tags(post_info.post.shareTree[0], post_info.post))
+                    eft = list(
+                        effective_tags(post_info.post.shareTree[0], post_info.post)
+                    )
                     if not eft:
                         log.info(
                             f"SKIP {describe}: [red]no effective tags[/] "
@@ -145,10 +170,12 @@ def main():
             pid=post_info.post.postId,
             handle=post_info.post.postingProject.handle,
             uid=post_info.post.postingProject.projectId,
-            timestamp=datetime.now(tz=timezone.utc).strftime("%a %m %B, %Y %H:%M:%S %Z"),
+            timestamp=datetime.now(tz=timezone.utc).strftime(
+                "%a %m %B, %Y %H:%M:%S %Z"
+            ),
             total_count=latest - last,
             percentage=f"{100.0 / (latest - last):.3f}",
-            delete_url="[[delete_url]]"
+            delete_url="[[delete_url]]",
         )
         cohost.switchn(POST_TO)  # required for the locking for some reason.
         pid = cohost.create_share(
@@ -163,7 +190,7 @@ def main():
         permitted = [post_info.post.postingProject.handle]
         if post_info.post.shareTree:
             permitted.append(post_info.post.shareTree[0].postingProject.handle)
-        perm_string = ''.join(map(lambda x: f'&permitted={x}', permitted))
+        perm_string = "".join(map(lambda x: f"&permitted={x}", permitted))
         new_content = the_template.render(
             original_href=post_info.post.singlePostPageUrl,
             typeof=cohost.typeof(post_info.post),
@@ -174,10 +201,12 @@ def main():
             pid=post_info.post.postId,
             handle=post_info.post.postingProject.handle,
             uid=post_info.post.postingProject.projectId,
-            timestamp=datetime.now(tz=timezone.utc).strftime("%a %m %B, %Y %H:%M:%S %Z"),
+            timestamp=datetime.now(tz=timezone.utc).strftime(
+                "%a %m %B, %Y %H:%M:%S %Z"
+            ),
             total_count=latest - last,
             percentage=f"{100.0 / (latest - last):.3f}",
-            delete_url=f"https://penguinencounter.github.io/cohost-randombot/del.html?target={pid}{perm_string}"
+            delete_url=f"https://penguinencounter.github.io/cohost-randombot/del.html?target={pid}{perm_string}",
         )
         cohost.edit_share(
             pid,

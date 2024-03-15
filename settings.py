@@ -16,3 +16,8 @@ load_dotenv(join(dirname(__file__), ".env"))
 COHOST_COOKIE = environ.get("COHOST_COOKIE")
 SCRATCHPAD_HANDLE = environ.get("SCRATCHPAD_HANDLE")
 POST_TO = environ.get("POST_TO")
+
+banned_tags = {"vent", "vent post", "venting", "randomizer/disallow"}
+banned_cws = banned_tags | {
+    "randomizer/disallow"
+}  # intentional overlap until I get more tags

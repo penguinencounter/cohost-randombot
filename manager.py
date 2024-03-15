@@ -71,7 +71,7 @@ def parse(content: str, context: AskModel):
 
 def main():
     logging.basicConfig(level=logging.INFO, handlers=[RichHandler()])
-    max_duration = 120 # seconds
+    max_duration = 120  # seconds
     while os.path.exists(".lock"):
         time.sleep(1)
         max_duration -= 1
@@ -82,7 +82,7 @@ def main():
     if not yesno:
         rp("[bold bright_red]not logged in!![/]")
         exit(1)
-    with open('.lock', 'w') as f:
+    with open(".lock", "w") as f:
         pass
     try:
         asks = list_asks(POST_TO)
@@ -92,5 +92,5 @@ def main():
         os.remove(".lock")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

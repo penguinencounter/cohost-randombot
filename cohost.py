@@ -233,7 +233,7 @@ def get_author_classic(pid: int):
     author = list(
         filter(
             lambda x: x["href"].startswith("/api/v1/project/")
-                      and not x["href"].endswith("/posts"),
+            and not x["href"].endswith("/posts"),
             basic_info["_links"],
         )
     )
@@ -409,9 +409,13 @@ def create_share(
     return known_pid
 
 
-def edit_share(pid: int, handle: str, share_of: int,
-               blocks: list[Union[MarkdownBlock, AskBlock, AttachmentBlock]],
-               tags: list[str]):
+def edit_share(
+    pid: int,
+    handle: str,
+    share_of: int,
+    blocks: list[Union[MarkdownBlock, AskBlock, AttachmentBlock]],
+    tags: list[str],
+):
     model = EditPostModel(
         projectHandle=handle,
         postId=pid,
@@ -423,7 +427,7 @@ def edit_share(pid: int, handle: str, share_of: int,
             headline="",
             postState=1,
             shareOfPostId=share_of,
-        )
+        ),
     )
     dumped = model.model_dump(mode="json")
     resp = _trpc_post("posts.update", dumped)
@@ -465,7 +469,11 @@ def list_asks(handle: str) -> list[AskModel]:
 
 
 def ask_reject(ask_id: str):
-    _try_with_backoff("https://cohost.org/api/v1/trpc/asks.reject?batch=1", method="POST", json={"0": ask_id})
+    _try_with_backoff(
+        "https://cohost.org/api/v1/trpc/asks.reject?batch=1",
+        method="POST",
+        json={"0": ask_id},
+    )
 
 
 def next_id() -> int:
